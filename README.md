@@ -4,13 +4,42 @@
 
 ## 일정
 
+기준: `강의 자료/IR_L01_Introduction.pdf` (Course Schedule, Project Schedule)
+
+### 주차별 수업
+
+| 주차 | 일자 | 내용 |
+|------|------|------|
+| 1 | 9/3 | Introduction |
+| 2 | 9/10 | Linear Algebra and Homogeneous Coordinates |
+| 3 | 9/17 | Probabilistic Robotics |
+| 4 | 9/24 | Project Guidelines (동영상, 추석) |
+| 5 | 10/1 | Motion Models + 프로젝트 실습 |
+| 6 | 10/8 | Sensor Models + 프로젝트 실습 |
+| 7 | 10/15 | Occupancy Grid Maps |
+| 8 | 10/22 | 중간고사 |
+| 9 | 10/29 | Kalman Filter and EKF Localization |
+| 10 | 11/5 | Particle Filter and SLAM Intro |
+| 11 | 11/12 | EKF SLAM and FastSLAM |
+| 12 | 11/19 | Graph-based SLAM (동영상, 출장) + 프로젝트 실습(자율) |
+| 13 | 11/26 | Project Demo Day (교수평가) |
+| 14 | 12/3 | Project Presentation (동료평가) |
+| 15 | 12/10 | 기말고사 |
+| 16 | 12/17 | 휴강 |
+
+### 프로젝트 마감
+
 | 일자 | 내용 |
 |------|------|
-| 10/1 | 수업 + 실습 (Jetson 환경 구성) |
-| 10/8 | 수업 + 실습 |
-| 12/3 | 프로젝트 데모 |
-| 12/10 | 프로젝트 결과 발표 |
-| 12/17 | 기말고사 실습 소개 |
+| 9/17 | 조편성 완료 (2인 1조) |
+| 10/1, 10/8 | 프로젝트 실습 수업 |
+| 10/15 | 실습완료 보고서 제출 |
+| 10/29 | 중간보고서 제출 |
+| 11/26 | Project Demo |
+| 12/3 | Project Presentation |
+| 12/10 | 결과보고서 제출 |
+
+> 확인 필요: 10/1 실습 슬라이드에는 데모 12/3, 결과 발표 12/10, 기말고사 12/17로 적혀 있어 위 일정과 일주일씩 다르다.
 
 ## 실습 주제 (소개된 항목)
 
