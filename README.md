@@ -88,7 +88,6 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 - `pwd`: 현재 경로
 - `cd <dir>`: 이동 (`cd ~`: 홈 디렉토리)
 - `clear`: 화면 정리
-- IR_L03_ProbabilisticRobotics
 
 ## 참고 링크
 
