@@ -88,20 +88,6 @@ python -c "import torch; print(torch.__version__, torch.cuda.is_available())"
 - `pwd`: 현재 경로
 - `cd <dir>`: 이동 (`cd ~`: 홈 디렉토리)
 - `clear`: 화면 정리
-
-### TODO
-
-- [ ] Linux, Ubuntu 공부하기
-- [ ] 아이디어 회의, 와플파이 사용 예정 체크
-- [ ] 노션 6번, 영상 3번
-- [ ] scripts는 ir-guide 안에
-
-## 강의 자료
-
-`강의 자료/` 폴더 (로컬에만 보관, 저장소에는 미포함)
-
-- IR_L01_Introduction
-- IR_L02_Linear Algebra
 - IR_L03_ProbabilisticRobotics
 
 ## 참고 링크
