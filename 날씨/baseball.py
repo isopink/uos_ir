@@ -7,7 +7,7 @@
 """
 import random
 
-DIGITS = 3
+DIGITS = 5
 
 
 def make_answer():
