@@ -53,7 +53,7 @@ HELP = """
   t            지금 화면을 3x3 조각으로 잘라 기억 (detectNet 이 모르는 물건용)
   q <문장>     기억에서 찾기   예) q a cup   /  q a black bag  /  q a plastic cup with a straw
                (※ 저장해 둔 기억을 찾는 것. 물건/카메라를 옮겼으면 다시 s, t 로 저장해야 반영됨)
-  f <문장>     지금 화면에서 바로 찾기 (기억 저장 없이, 겹치는 창 34개 + 검출 상자, 1~2초 걸림)
+  f <문장>     지금 화면에서 바로 찾기 (기억 저장 없이, 겹치는 창 83개 + 검출 상자, 약 2초 걸림)
   l            기억 목록 보기
   x            기억 모두 지우기
   h            도움말
@@ -153,10 +153,11 @@ def grid_crops(frame_rgb, n=3):
     return out
 
 
-def sliding_crops(frame_rgb, sizes=(2, 3)):
+def sliding_crops(frame_rgb, sizes=(2, 3, 4)):
     """
     여러 크기의 창을 반씩 겹치게 밀면서 자른다 (물건이 조각 경계에서 잘리지 않도록).
-    sizes=(2, 3): 화면의 1/2 크기 창 3x3=9개 + 1/3 크기 창 5x5=25개 = 34개
+    sizes=(2, 3, 4): 화면의 1/2 창 9개 + 1/3 창 25개 + 1/4 창 49개 = 83개
+      (1/4 창: 화면에 작게 보이는 물건이 의자·책상 같은 큰 배경에 묻히지 않게)
     출력 형식은 grid_crops 와 같음.
     """
     h, w = frame_rgb.shape[:2]
