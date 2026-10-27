@@ -52,6 +52,8 @@ HELP = """
   s            지금 화면의 검출 물체들을 기억
   t            지금 화면을 3x3 조각으로 잘라 기억 (detectNet 이 모르는 물건용)
   q <문장>     기억에서 찾기   예) q a cup   /  q a black bag  /  q a plastic cup with a straw
+               (※ 저장해 둔 기억을 찾는 것. 물건/카메라를 옮겼으면 다시 s, t 로 저장해야 반영됨)
+  f <문장>     지금 화면에서 바로 찾기 (기억 저장 없이, 16조각 + 검출 상자로 더 잘게)
   l            기억 목록 보기
   x            기억 모두 지우기
   h            도움말
@@ -149,6 +151,16 @@ def grid_crops(frame_rgb, n=3):
             l, t, rr, b = c * w // n, r * h // n, (c + 1) * w // n, (r + 1) * h // n
             out.append((frame_rgb[t:b, l:rr].copy(), (l, t, rr, b), "tile{}{}".format(r, c)))
     return out
+
+
+def age_text(t):
+    """저장 시각 → '35초 전', '4분 전' 같은 글자"""
+    sec = int(time.time() - t)
+    if sec < 60:
+        return "{}초 전".format(sec)
+    if sec < 3600:
+        return "{}분 전".format(sec // 60)
+    return "{}시간 전".format(sec // 3600)
 
 
 def save_result_image(memory, results, query):
@@ -259,12 +271,16 @@ def run_loop(args, clip, memory, net, inp, out, font, cmds):
                     sims = np.array(memory.vecs) @ clip.text(query)
                     order = list(np.argsort(-sims)[:3])
                     results = [(float(sims[i]), int(i)) for i in order]
-                    print("'{}' 검색 결과:".format(query))
+                    print("'{}' 기억 검색 결과 (※ 지금 화면이 아니라 저장된 기억 기준):".format(query))
                     for rank, (s, i) in enumerate(results, 1):
-                        print("  #{} 유사도 {:.3f}  {:12s} 위치 {}".format(rank, s, memory.labels[i], memory.boxes[i]))
+                        print("  #{} 유사도 {:.3f}  {:12s} 위치 {}  ({} 기억)".format(
+                            rank, s, memory.labels[i], memory.boxes[i], age_text(memory.times[i])))
                     print("  결과 사진:", save_result_image(memory, results, query))
                     best = results[0][1]
-                    highlight = (memory.boxes[best], "FOUND: {} ({:.2f})".format(query, results[0][0]), time.time() + 5)
+                    highlight = (memory.boxes[best], "MEMORY: {} ({:.2f}, {})".format(
+                        query, results[0][0], age_text(memory.times[best])), time.time() + 5)
+            elif cmd.startswith("f "):
+                pending = ("f", cmd[2:].strip())
             elif cmd in ("h", "help"):
                 print(HELP)
             else:
@@ -291,7 +307,20 @@ def run_loop(args, clip, memory, net, inp, out, font, cmds):
 
         detections = net.Detect(img, overlay="box,labels,conf")
 
-        if pending and clean is not None:
+        if isinstance(pending, tuple) and clean is not None:
+            # f: 지금 화면에서 바로 찾기 (검출 상자 + 4x4 조각을 문장과 비교, 기억에는 저장 안 함)
+            query = pending[1]
+            crops = detection_crops(clean, detections, net) + grid_crops(clean, n=4)
+            vecs = clip.images([c[0] for c in crops])
+            sims = vecs @ clip.text(query)
+            order = list(np.argsort(-sims)[:3])
+            print("'{}' 지금 화면 검색 결과:".format(query))
+            for rank, i in enumerate(order, 1):
+                print("  #{} 유사도 {:.3f}  {:12s} 위치 {}".format(rank, float(sims[i]), crops[i][2], crops[i][1]))
+            best = order[0]
+            highlight = (crops[best][1], "NOW: {} ({:.2f})".format(query, float(sims[best])), time.time() + 5)
+            pending = None
+        elif pending and clean is not None:
             crops = detection_crops(clean, detections, net) if pending == "s" else grid_crops(clean)
             if crops:
                 vecs = clip.images([c[0] for c in crops])
