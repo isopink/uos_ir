@@ -170,6 +170,9 @@ def sliding_crops(frame_rgb, sizes=(2, 3)):
     return out
 
 
+# f 결과의 최고 확률이 이 값보다 낮으면 "지금 화면에는 없다"고 판단 (로봇: 다음 후보로 이동)
+FOUND_THRESHOLD = 0.5
+
 # 배경 문장: 질의 문장이 이것들보다 "확실히" 더 맞는 창을 고르기 위한 경쟁 상대
 BACKGROUND_PROMPTS = [
     "a photo of a wall", "a photo of the floor", "a photo of a ceiling", "a photo of a desk",
@@ -373,7 +376,15 @@ def run_loop(args, clip, memory, net, inp, out, font, cmds):
                     rank, float(score[i]), float(sims[i]), crops[i][2], crops[i][1]))
             print("  결과 사진:", save_crops_image([crops[i][0] for i in order], "result_now.jpg"))
             best = order[0]
-            highlight = (crops[best][1], "NOW: {} ({:.2f})".format(query, float(score[best])), time.time() + 5)
+            if score[best] >= FOUND_THRESHOLD:
+                print("  → 찾음! (확률 {:.2f} ≥ {})".format(float(score[best]), FOUND_THRESHOLD))
+                highlight = (crops[best][1], "NOW: {} ({:.2f})".format(query, float(score[best])), time.time() + 5)
+            else:
+                # 어느 창도 배경보다 확실히 '그 물건' 같지 않음 = 지금 화면에는 없다고 판단
+                print("  → 지금 화면에서는 못 찾음 (최고 확률 {:.2f} < {}). 물건이 화면 밖이거나 너무 작을 수 있음".format(
+                    float(score[best]), FOUND_THRESHOLD))
+                highlight = (None, "NOT FOUND: {} (best {:.2f})".format(query, float(score[best])),
+                             time.time() + 5)
             pending = None
         elif pending and clean is not None:
             crops = detection_crops(clean, detections, net) if pending == "s" else grid_crops(clean)
@@ -389,9 +400,12 @@ def run_loop(args, clip, memory, net, inp, out, font, cmds):
 
         # 검색 결과를 5초간 화면에 표시
         if highlight and time.time() < highlight[2]:
-            l, t, r, b = highlight[0]
-            cudaDrawRect(img, (l, t, r, b), (255, 0, 255, 70))
-            font.OverlayText(img, img.width, img.height, highlight[1], l + 5, t + 5, font.White, font.Gray40)
+            if highlight[0] is None:  # 못 찾음: 상자 없이 글자만
+                font.OverlayText(img, img.width, img.height, highlight[1], 10, 10, font.White, font.Gray40)
+            else:
+                l, t, r, b = highlight[0]
+                cudaDrawRect(img, (l, t, r, b), (255, 0, 255, 70))
+                font.OverlayText(img, img.width, img.height, highlight[1], l + 5, t + 5, font.White, font.Gray40)
         font.OverlayText(img, img.width, img.height, "memory: {}".format(len(memory.vecs)),
                          10, img.height - 40, font.White, font.Gray40)
 
