@@ -53,7 +53,7 @@ HELP = """
   t            지금 화면을 3x3 조각으로 잘라 기억 (detectNet 이 모르는 물건용)
   q <문장>     기억에서 찾기   예) q a cup   /  q a black bag  /  q a plastic cup with a straw
                (※ 저장해 둔 기억을 찾는 것. 물건/카메라를 옮겼으면 다시 s, t 로 저장해야 반영됨)
-  f <문장>     지금 화면에서 바로 찾기 (기억 저장 없이, 16조각 + 검출 상자로 더 잘게)
+  f <문장>     지금 화면에서 바로 찾기 (기억 저장 없이, 겹치는 창 34개 + 검출 상자, 1~2초 걸림)
   l            기억 목록 보기
   x            기억 모두 지우기
   h            도움말
@@ -151,6 +151,58 @@ def grid_crops(frame_rgb, n=3):
             l, t, rr, b = c * w // n, r * h // n, (c + 1) * w // n, (r + 1) * h // n
             out.append((frame_rgb[t:b, l:rr].copy(), (l, t, rr, b), "tile{}{}".format(r, c)))
     return out
+
+
+def sliding_crops(frame_rgb, sizes=(2, 3)):
+    """
+    여러 크기의 창을 반씩 겹치게 밀면서 자른다 (물건이 조각 경계에서 잘리지 않도록).
+    sizes=(2, 3): 화면의 1/2 크기 창 3x3=9개 + 1/3 크기 창 5x5=25개 = 34개
+    출력 형식은 grid_crops 와 같음.
+    """
+    h, w = frame_rgb.shape[:2]
+    out = []
+    for n in sizes:
+        cw, ch = w // n, h // n
+        sx, sy = cw // 2, ch // 2          # 반 칸씩 이동 → 50% 겹침
+        for t in range(0, h - ch + 1, sy):
+            for l in range(0, w - cw + 1, sx):
+                out.append((frame_rgb[t:t + ch, l:l + cw].copy(), (l, t, l + cw, t + ch), "win{}".format(n)))
+    return out
+
+
+# 배경 문장: 질의 문장이 이것들보다 "확실히" 더 맞는 창을 고르기 위한 경쟁 상대
+BACKGROUND_PROMPTS = [
+    "a photo of a wall", "a photo of the floor", "a photo of a ceiling", "a photo of a desk",
+    "a photo of a chair", "a photo of a person", "a photo of a computer monitor",
+    "a photo of a keyboard", "a blurry photo of a room",
+]
+
+
+def live_scores(clip, vecs, query):
+    """
+    각 창이 '배경 문장들보다 질의 문장에 더 가까운 정도'를 확률(0~1)로 계산한다.
+    = CLIP 의 zero-shot 분류 방식: [질의, 배경1, 배경2, ...] 중 무엇인지 softmax
+    입력: vecs — (N, 512) 창 벡터, query — 찾는 문장
+    출력: (확률 배열, 질의와의 원래 유사도 배열)
+    """
+    texts = [query] + [p for p in BACKGROUND_PROMPTS if p.lower() not in query.lower()]
+    tvecs = np.stack([clip.text(t) for t in texts])          # (K, 512)
+    logits = 100.0 * vecs @ tvecs.T                          # (N, K), CLIP 기본 온도 100
+    logits -= logits.max(axis=1, keepdims=True)
+    probs = np.exp(logits)
+    probs /= probs.sum(axis=1, keepdims=True)
+    return probs[:, 0], vecs @ tvecs[0]
+
+
+def save_crops_image(crops_rgb, name):
+    """조각 사진들을 옆으로 붙여 memory/<name> 으로 저장"""
+    tiles = [Image.fromarray(c).resize((240, max(1, int(240 * c.shape[0] / c.shape[1])))) for c in crops_rgb]
+    canvas = Image.new("RGB", (240 * len(tiles), max(t.height for t in tiles)), (40, 40, 40))
+    for k, t in enumerate(tiles):
+        canvas.paste(t, (240 * k, 0))
+    path = os.path.join(MEM_DIR, name)
+    canvas.save(path, quality=90)
+    return path
 
 
 def age_text(t):
@@ -308,17 +360,20 @@ def run_loop(args, clip, memory, net, inp, out, font, cmds):
         detections = net.Detect(img, overlay="box,labels,conf")
 
         if isinstance(pending, tuple) and clean is not None:
-            # f: 지금 화면에서 바로 찾기 (검출 상자 + 4x4 조각을 문장과 비교, 기억에는 저장 안 함)
+            # f: 지금 화면에서 바로 찾기 (기억에는 저장 안 함)
             query = pending[1]
-            crops = detection_crops(clean, detections, net) + grid_crops(clean, n=4)
+            t0 = time.time()
+            crops = detection_crops(clean, detections, net) + sliding_crops(clean)
             vecs = clip.images([c[0] for c in crops])
-            sims = vecs @ clip.text(query)
-            order = list(np.argsort(-sims)[:3])
-            print("'{}' 지금 화면 검색 결과:".format(query))
+            score, sims = live_scores(clip, vecs, query)
+            order = list(np.argsort(-score)[:3])
+            print("'{}' 지금 화면 검색 결과 ({}개 창, {:.1f}초):".format(query, len(crops), time.time() - t0))
             for rank, i in enumerate(order, 1):
-                print("  #{} 유사도 {:.3f}  {:12s} 위치 {}".format(rank, float(sims[i]), crops[i][2], crops[i][1]))
+                print("  #{} 확률 {:.2f} (유사도 {:.3f})  {:12s} 위치 {}".format(
+                    rank, float(score[i]), float(sims[i]), crops[i][2], crops[i][1]))
+            print("  결과 사진:", save_crops_image([crops[i][0] for i in order], "result_now.jpg"))
             best = order[0]
-            highlight = (crops[best][1], "NOW: {} ({:.2f})".format(query, float(sims[best])), time.time() + 5)
+            highlight = (crops[best][1], "NOW: {} ({:.2f})".format(query, float(score[best])), time.time() + 5)
             pending = None
         elif pending and clean is not None:
             crops = detection_crops(clean, detections, net) if pending == "s" else grid_crops(clean)
