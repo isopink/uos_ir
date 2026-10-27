@@ -206,7 +206,9 @@ def main():
     clip = Clip()
     memory = Memory()
     net = detectNet(args.network, argv=[], threshold=args.threshold)
-    inp = videoSource(args.input, options={"width": args.width, "height": args.height, "codec": "mjpeg"})
+    # 수업 예제(simple_mobilenet.py)와 똑같은 입력 옵션
+    inp = videoSource(args.input, options={"width": args.width, "height": args.height,
+                                           "codec": "mjpeg", "encoder": "v4l2"})
     out = videoOutput(args.output, options={"codec": "h264", "encoder": "v4l2", "bitrate": 8000000, "latency": 30})
     font = cudaFont()
     cmds = Commands()
@@ -214,14 +216,31 @@ def main():
     print(HELP)
     print("브라우저에서 http://<JETSON-IP>:8554 를 열어 영상을 확인하세요.")
 
+    try:
+        run_loop(args, clip, memory, net, inp, out, font, cmds)
+    except KeyboardInterrupt:
+        pass
+    except Exception:
+        import traceback
+        traceback.print_exc()
+        print("\n오류로 종료합니다. 위의 Traceback 을 보여주세요.")
+    # 영상 서버 스레드가 남아 프로그램이 안 꺼지는 것을 막기 위해 강제 종료
+    sys.stdout.flush()
+    os._exit(0)
+
+
+def run_loop(args, clip, memory, net, inp, out, font, cmds):
+    """영상 한 장씩: 명령 처리 → 캡처 → (저장) → 검출 → (검색 결과 표시) → 출력"""
     highlight = None  # (box, 표시할 글자, 끝나는 시각)
     pending = None    # 다음 프레임에서 처리할 저장 명령 ('s' 또는 't')
+    frames, last_report, empty = 0, time.time(), 0
 
     while True:
         cmd = cmds.pop()
         if cmd:
             if cmd in ("exit", "quit"):
-                break
+                print("종료합니다.")
+                return
             elif cmd in ("s", "t"):
                 pending = cmd
             elif cmd == "l":
@@ -253,7 +272,16 @@ def main():
 
         img = inp.Capture()
         if img is None:
+            empty += 1
+            if empty % 5 == 0:
+                print("[진단] 카메라에서 영상이 안 들어옵니다 ({}번째). 카메라 번호/다른 프로그램 사용 여부 확인".format(empty))
             continue
+        frames += 1
+        if frames == 1:
+            print("[진단] 첫 영상 수신: {}x{} → 이제 브라우저를 새로고침하세요".format(img.width, img.height))
+        if time.time() - last_report > 15:
+            print("[진단] 영상 {}장 처리 중, detectNet {:.0f} FPS".format(frames, net.GetNetworkFPS()))
+            last_report = time.time()
 
         # 저장 명령이 있으면, 상자를 그리기 '전'의 깨끗한 화면을 복사해 둔다
         clean = None
@@ -286,9 +314,8 @@ def main():
         out.Render(img)
         out.SetStatus("find-object | {:.0f} FPS".format(net.GetNetworkFPS()))
         if not inp.IsStreaming() or not out.IsStreaming():
-            break
-
-    print("종료합니다.")
+            print("영상 입력/출력이 끝나서 종료합니다.")
+            return
 
 
 if __name__ == "__main__":
